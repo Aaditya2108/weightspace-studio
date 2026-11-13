@@ -88,6 +88,6 @@ def test_model_summary(sample_tensors):
 
     assert model.model_id in summary
     assert "Tensors: 4" in summary
+    assert "Total Tensor Elements:" in summary
     assert "encoder.weight" in summary
     assert "key: val" in summary
-

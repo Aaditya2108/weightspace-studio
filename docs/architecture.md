@@ -11,7 +11,7 @@ WeightSpace uses a standard `src` layout under `packages/weightspace/src/weights
 ```
 weightspace-studio/
 ├── pyproject.toml                     # Root package configuration
-├── .github/workflows/ci.yml           # Automated CI across Python versions
+├── .github/workflows/ci.yml           # Automated CI across Python versions & configurations
 ├── docs/
 │   └── architecture.md                # Architecture specification
 └── packages/weightspace/
@@ -51,11 +51,14 @@ Every tensor is described by an immutable, frozen Pydantic model (`TensorDescrip
 **Checksum Specification (`wsp-sha256-v1`)**:
 The cryptographic checksum is a deterministic 64-character lowercase hexadecimal SHA-256 digest computed over:
 1. Version identifier: `wsp-sha256-v1\n` (ASCII)
-2. Canonical dtype string: `dtype:<dtype_name>\n` (UTF-8)
+2. Canonical dtype string: `dtype:<name>[<byteorder_str>]\n` (UTF-8)
 3. Canonical shape string: `shape:<dim0,dim1,...>\n` (UTF-8)
 4. Contiguous tensor payload bytes.
 
-This ensures that identical byte content with differing shapes (e.g. `(4, 4)` vs `(16,)`) or differing dtypes (e.g. `float32` vs `int32`) produces strictly distinct cryptographic digests.
+**Guarantees**:
+- Preserves full NumPy endianness (`<f4` vs `>f4`). Identical raw bytes and shapes with different endian interpretations produce distinct digests.
+- Safely handles PyTorch tensors—including `bfloat16`—using direct raw-byte reinterpretation without relying on `.numpy()`.
+- Differentiates identical byte buffers when tensor shapes or dtypes differ.
 
 ### Explicit Representation of Unknown Properties
 To prevent brittle heuristics, semantic roles (`role`), parent modules (`module`), and parameter trainability (`trainable`) default to `None` unless explicitly declared in checkpoint metadata. Descriptors also reject empty tensor names and negative shape dimensions.
@@ -82,6 +85,7 @@ The Safetensors loader produces a clean `SafetensorsData(tensors, metadata)` dat
 
 In Milestone 1, checkpoint tensors are loaded as in-memory NumPy arrays. While this provides universal compatibility and high speed for standard models, it has known boundaries:
 - **Host Memory Consumption**: The entire checkpoint is resident in host RAM.
+- **Buffer / Parameter Disambiguation**: The model tracks `Total Tensor Elements` in `summary()` because checkpoints do not inherently distinguish parameters from persistent buffers without architecture definitions.
 - **Copy Overhead**: `get_tensor()` returns defensive NumPy array copies to enforce immutability.
 - **Roadmap (Milestone 2)**: Milestone 2 will introduce memory-mapped streaming (`mmap`) and copy-on-write (CoW) tensor views to handle multi-gigabyte models without full memory replication.
 

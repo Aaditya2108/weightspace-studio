@@ -41,7 +41,7 @@ def test_empty_weight_model():
 
     summary = empty_model.summary()
     assert "Tensors: 0" in summary
-    assert "Total Parameters: 0" in summary
+    assert "Total Tensor Elements: 0" in summary
 
 
 def test_invalid_tensor_descriptor_missing_fields():

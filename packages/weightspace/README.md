@@ -44,5 +44,5 @@ if wsp.PyTorchAdapter.is_available():
 
 - **Storage**: In Milestone 1, checkpoint tensors are loaded as in-memory NumPy arrays. Copy-on-write and memory-mapping are planned for Milestone 2.
 - **Immutability**: Tensor descriptors are frozen and cannot be modified. Original tensors are stored read-only, and accessor methods return defensive copies to prevent in-place mutation.
-- **Checksums**: Uses `wsp-sha256-v1` which incorporates canonical dtype, shape, and raw contiguous bytes.
+- **Checksums**: Uses `wsp-sha256-v1` which incorporates canonical dtype, NumPy byte-order, shape, and raw contiguous bytes. Supports PyTorch `bfloat16` without requiring NumPy conversion.
 - **PyTorch Integration**: Optional and strictly pre-validated. Validation failures cannot leave the target module partially modified.

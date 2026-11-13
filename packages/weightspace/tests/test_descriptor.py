@@ -7,6 +7,12 @@ from pydantic import ValidationError
 
 from weightspace.core.descriptor import CHECKSUM_VERSION, TensorDescriptor, compute_tensor_checksum
 
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+
 VALID_HEX_64 = "a" * 64
 
 
@@ -126,7 +132,6 @@ def test_compute_tensor_checksum_deterministic():
 
 def test_checksum_different_shape_same_bytes():
     """Verify that identical byte content with different shapes produces different checksums."""
-    # 16 float32 zeros: same 64 raw zero-bytes
     arr_2d = np.zeros((4, 4), dtype=np.float32)
     arr_1d = np.zeros((16,), dtype=np.float32)
 
@@ -140,7 +145,6 @@ def test_checksum_different_shape_same_bytes():
 
 def test_checksum_different_dtype_same_bytes():
     """Verify that identical byte content with different dtypes produces different checksums."""
-    # 16 zeros: 64 zero-bytes for both float32 and int32
     arr_float = np.zeros((16,), dtype=np.float32)
     arr_int = np.zeros((16,), dtype=np.int32)
 
@@ -150,6 +154,36 @@ def test_checksum_different_dtype_same_bytes():
     c_int = compute_tensor_checksum(arr_int)
 
     assert c_float != c_int
+
+
+def test_checksum_different_endianness_same_bytes():
+    """Verify that same shape and raw bytes with different endian interpretation produce different checksums."""
+    raw = b"\x00\x00\x80\x3f\x00\x00\x00\x40"
+    arr_le = np.frombuffer(raw, dtype="<f4")
+    arr_be = np.frombuffer(raw, dtype=">f4")
+
+    assert arr_le.shape == arr_be.shape
+    assert arr_le.tobytes() == arr_be.tobytes()
+    assert arr_le.dtype.str != arr_be.dtype.str
+
+    c_le = compute_tensor_checksum(arr_le)
+    c_be = compute_tensor_checksum(arr_be)
+
+    assert c_le != c_be
+
+
+@pytest.mark.skipif(not HAS_TORCH, reason="PyTorch is not available")
+def test_checksum_pytorch_bfloat16():
+    """Verify checksum computation for PyTorch bfloat16 tensors without .numpy()."""
+    t = torch.tensor([1.0, 2.0, 3.5], dtype=torch.bfloat16)
+    checksum = compute_tensor_checksum(t)
+    assert isinstance(checksum, str)
+    assert len(checksum) == 64
+
+    # Verify descriptor construction succeeds with bfloat16
+    desc = TensorDescriptor.from_tensor("layer.bf16", t)
+    assert desc.dtype == "bfloat16"
+    assert desc.checksum == checksum
 
 
 def test_compute_tensor_checksum_invalid_type():

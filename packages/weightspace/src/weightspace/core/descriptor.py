@@ -4,7 +4,7 @@ Checksum Specification:
     Version: wsp-sha256-v1
     Format: SHA-256 digest computed over:
         1. Version identifier: "wsp-sha256-v1\\n" (ASCII)
-        2. Canonical dtype string: "dtype:<name>\\n" (UTF-8)
+        2. Canonical dtype string: "dtype:<name>[<byteorder_str>]\\n" (UTF-8)
         3. Canonical shape string: "shape:<dim0,dim1,...>\\n" (UTF-8)
         4. Contiguous tensor payload bytes.
 """
@@ -34,8 +34,9 @@ def compute_tensor_checksum(tensor: Any) -> str:
         Payload:
             contiguous raw bytes
 
-    Ensures that identical byte content with different shapes or dtypes
-    produces distinct checksum digests.
+    Ensures that identical byte content with different shapes, dtypes, or
+    NumPy endianness interpretations produces distinct checksum digests.
+    Supports PyTorch tensors (including bfloat16) without relying on .numpy().
     """
     canonical_dtype: str
     canonical_shape: Tuple[int, ...]
@@ -43,20 +44,27 @@ def compute_tensor_checksum(tensor: Any) -> str:
 
     if isinstance(tensor, np.ndarray):
         arr = np.ascontiguousarray(tensor)
-        canonical_dtype = arr.dtype.name
+        # Preserve full dtype specification including byte order (e.g. '<f4', '>f4', '|u1')
+        canonical_dtype = f"{arr.dtype.name}[{arr.dtype.str}]"
         canonical_shape = tuple(arr.shape)
         raw_bytes = arr.tobytes()
     elif hasattr(tensor, "detach") and hasattr(tensor, "cpu"):
         cpu_t = tensor.detach().cpu().contiguous()
-        if hasattr(cpu_t, "numpy"):
-            arr = cpu_t.numpy()
-            canonical_dtype = arr.dtype.name
-            canonical_shape = tuple(arr.shape)
-            raw_bytes = arr.tobytes()
+        dtype_name = str(cpu_t.dtype).replace("torch.", "")
+        canonical_dtype = f"torch:{dtype_name}"
+        canonical_shape = tuple(cpu_t.shape)
+
+        if cpu_t.numel() == 0:
+            raw_bytes = b""
         else:
-            canonical_dtype = str(cpu_t.dtype).replace("torch.", "")
-            canonical_shape = tuple(cpu_t.shape)
-            raw_bytes = bytes(cpu_t.untyped_storage())
+            try:
+                import torch
+                # Safe byte reinterpretation that works for all PyTorch dtypes including bfloat16
+                raw_bytes = bytes(cpu_t.reshape(-1).view(torch.uint8))
+            except Exception:
+                offset = cpu_t.storage_offset() * cpu_t.element_size()
+                nbytes = cpu_t.numel() * cpu_t.element_size()
+                raw_bytes = bytes(cpu_t.untyped_storage())[offset : offset + nbytes]
     else:
         raise TypeError(f"Unsupported tensor type for checksum calculation: {type(tensor)}")
 

@@ -126,7 +126,7 @@ class WeightModel:
             f"WeightModel [ID: {self._model_id}]",
             f"Source: {self._source_path or '<in-memory>'}",
             f"Tensors: {len(self._tensors)}",
-            f"Total Parameters: {total_elements:,}",
+            f"Total Tensor Elements: {total_elements:,}",
             f"Estimated Size: {size_mb:.2f} MB",
         ]
         if self._metadata:
@@ -139,4 +139,3 @@ class WeightModel:
             lines.append(f"  - {desc.name}: shape={desc.shape}, dtype={desc.dtype}, checksum={desc.checksum[:8]}...")
 
         return "\n".join(lines)
-
