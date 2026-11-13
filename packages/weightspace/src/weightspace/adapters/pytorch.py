@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, Set
 from ..core.exceptions import ModuleMismatchError, PyTorchNotAvailableError
 from ..core.model import WeightModel
 
@@ -12,7 +12,8 @@ class PyTorchAdapter:
 
     Does not guess or reconstruct architectures from raw state dicts. Instead,
     it loads tensor parameters directly into an explicitly supplied torch.nn.Module.
-    Handles PyTorch lazily and gracefully when torch is not installed.
+    Validates all matching keys and shapes before touching the target module to
+    guarantee atomic updates and prevent partial state modification.
     """
 
     @staticmethod
@@ -34,6 +35,10 @@ class PyTorchAdapter:
     ) -> Any:
         """Load weights from a WeightModel into an explicitly supplied torch.nn.Module.
 
+        All keys and tensor shapes are pre-validated before any parameters or buffers
+        are modified on the target module. If validation fails, the module remains
+        in its exact original state.
+
         Args:
             weight_model: Source WeightModel.
             module: Target torch.nn.Module instance.
@@ -45,7 +50,7 @@ class PyTorchAdapter:
         Raises:
             PyTorchNotAvailableError: If PyTorch is not installed.
             TypeError: If module is not a torch.nn.Module instance.
-            ModuleMismatchError: If keys or tensor shapes mismatch under strict mode.
+            ModuleMismatchError: If keys or tensor shapes mismatch.
         """
         try:
             import torch
@@ -61,34 +66,53 @@ class PyTorchAdapter:
             )
 
         module_state = module.state_dict()
-        new_state = {}
-
-        model_tensor_names = set(weight_model.registry.names())
-        module_param_names = set(module_state.keys())
+        model_tensor_names: Set[str] = set(weight_model.registry.names())
+        module_param_names: Set[str] = set(module_state.keys())
 
         missing_keys = module_param_names - model_tensor_names
         unexpected_keys = model_tensor_names - module_param_names
 
+        # Key validation in strict mode
         if strict and (missing_keys or unexpected_keys):
             raise ModuleMismatchError(
                 f"Mismatch loading weights into module: "
                 f"missing={sorted(missing_keys)}, unexpected={sorted(unexpected_keys)}"
             )
 
+        # Determine target keys to transfer
+        target_keys = module_param_names if strict else (module_param_names & model_tensor_names)
+
+        # Pre-validate all tensor shapes prior to making any modifications
+        shape_mismatches = []
+        for name in sorted(target_keys):
+            desc = weight_model.inspect(name)
+            expected_shape = tuple(module_state[name].shape)
+            if tuple(desc.shape) != expected_shape:
+                shape_mismatches.append(
+                    f"tensor '{name}': model has {tuple(desc.shape)}, module expects {expected_shape}"
+                )
+
+        if shape_mismatches:
+            raise ModuleMismatchError(
+                "Shape mismatch during validation: " + "; ".join(shape_mismatches)
+            )
+
+        # Pre-validation passed: Stage all converted tensors
+        staged_state: Dict[str, Any] = {}
         for name, param in module_state.items():
-            if name in model_tensor_names:
+            if name in target_keys:
                 arr = weight_model.get_tensor(name)
-                if tuple(arr.shape) != tuple(param.shape):
-                    raise ModuleMismatchError(
-                        f"Shape mismatch for tensor '{name}': model has {tuple(arr.shape)}, "
-                        f"module expects {tuple(param.shape)}"
-                    )
-                # Convert numpy array to torch tensor matching target device and dtype
                 t = torch.from_numpy(arr).to(device=param.device, dtype=param.dtype)
-                new_state[name] = t
+                staged_state[name] = t
             elif not strict:
-                new_state[name] = param
+                staged_state[name] = param
 
-        module.load_state_dict(new_state, strict=strict)
+        # Snapshot original state to guarantee non-destructive atomicity on internal failure
+        original_state = {k: v.clone() for k, v in module.state_dict().items()}
+        try:
+            module.load_state_dict(staged_state, strict=strict)
+        except Exception:
+            module.load_state_dict(original_state, strict=False)
+            raise
+
         return module
-

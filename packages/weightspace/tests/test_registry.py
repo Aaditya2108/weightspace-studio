@@ -1,6 +1,7 @@
 """Tests for per-model thread-safe TensorRegistry."""
 
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import pytest
 
 from weightspace.core.descriptor import TensorDescriptor
@@ -9,11 +10,12 @@ from weightspace.core.registry import TensorRegistry
 
 
 def make_desc(name: str) -> TensorDescriptor:
+    valid_checksum = hashlib.sha256(f"seed_{name}".encode("utf-8")).hexdigest()
     return TensorDescriptor(
         name=name,
         shape=(16, 16),
         dtype="float32",
-        checksum=f"hash_{name}",
+        checksum=valid_checksum,
     )
 
 
@@ -87,4 +89,3 @@ def test_registry_thread_safety():
 
     assert len(registry) == n_threads * items_per_thread
     assert len(registry.list()) == n_threads * items_per_thread
-

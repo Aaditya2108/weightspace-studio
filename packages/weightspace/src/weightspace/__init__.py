@@ -1,7 +1,7 @@
 """WeightSpace: Universal framework for Weight-Space Programming (WSP)."""
 
 from .adapters.pytorch import PyTorchAdapter
-from .core.descriptor import TensorDescriptor, compute_tensor_checksum
+from .core.descriptor import CHECKSUM_VERSION, TensorDescriptor, compute_tensor_checksum
 from .core.exceptions import (
     AdapterError,
     CorruptedFileError,
@@ -22,6 +22,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "AdapterError",
+    "CHECKSUM_VERSION",
     "CorruptedFileError",
     "DescriptorValidationError",
     "DuplicateTensorError",
@@ -39,4 +40,3 @@ __all__ = [
     "compute_tensor_checksum",
     "load_safetensors",
 ]
-

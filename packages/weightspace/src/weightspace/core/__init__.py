@@ -1,6 +1,6 @@
 """Core abstractions of the WeightSpace framework."""
 
-from .descriptor import TensorDescriptor, TensorRole, compute_tensor_checksum
+from .descriptor import CHECKSUM_VERSION, TensorDescriptor, TensorRole, compute_tensor_checksum
 from .exceptions import (
     AdapterError,
     CorruptedFileError,
@@ -18,6 +18,7 @@ from .registry import TensorRegistry
 
 __all__ = [
     "AdapterError",
+    "CHECKSUM_VERSION",
     "CorruptedFileError",
     "DescriptorValidationError",
     "DuplicateTensorError",
@@ -33,4 +34,3 @@ __all__ = [
     "WeightSpaceError",
     "compute_tensor_checksum",
 ]
-

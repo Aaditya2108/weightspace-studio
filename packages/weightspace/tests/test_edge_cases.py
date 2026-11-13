@@ -1,5 +1,6 @@
 """Edge cases, failure modes, and optional dependency handling."""
 
+import hashlib
 from unittest.mock import patch
 import numpy as np
 import pytest
@@ -14,6 +15,8 @@ from weightspace.core.exceptions import (
 )
 from weightspace.core.model import WeightModel
 from weightspace.core.registry import TensorRegistry
+
+VALID_HEX_64 = hashlib.sha256(b"seed").hexdigest()
 
 
 def test_optional_pytorch_availability_when_missing():
@@ -70,9 +73,8 @@ def test_non_contiguous_array_checksum():
 def test_duplicate_registration_in_model_init():
     """Verify registry rejects duplicate names."""
     registry = TensorRegistry(model_id="test-dup")
-    desc1 = TensorDescriptor(name="w", shape=(2,), dtype="float32", checksum="1234")
+    desc1 = TensorDescriptor(name="w", shape=(2,), dtype="float32", checksum=VALID_HEX_64)
     registry.register(desc1)
 
     with pytest.raises(DuplicateTensorError):
         registry.register(desc1)
-
